@@ -1,0 +1,370 @@
+; =============================================================================
+; Disassembly of IRON VEIN pipeline valve firmware (artifact ACT-III)
+; Binary: ACT-III_fixed.bin loaded at flash base 0x10000000
+; Architecture: ARM Cortex-M33 (Thumb-2), RP2350, Pico SDK 2.2.0
+; Toolchain: arm-none-eabi-gcc 14.2.Rel1, -O3
+;
+; File offsets in this listing are VA - 0x10000000, matching the .bin.
+; Every defect is an in-place, same-size byte patch, so no address moves.
+;
+; -----------------------------------------------------------------------------
+; KEY FINDINGS - THE FOUR SABOTAGE SITES
+; -----------------------------------------------------------------------------
+;
+;   Defect 1 - Valve command authorization (control_handle_frame)
+;     VA 0x100074E8  file 0x74E8
+;       d0e9  beq.n 0x100074BE   ; correct: authorization failed, reject
+;     COMPROMISE: patch byte 0x74E9 0xD0 -> 0xD1 (beq -> bne)
+;     The authorization verdict is inverted, so a replayed or forged command
+;     that opens the sealed envelope reaches valve_apply_command.
+;
+;   Defect 2 - Covert beacon (implant_tick)
+;     VA 0x1000A244  file 0xA244
+;       b10a  cbz r2, 0x1000A24A ; correct: neutralization gate clear, no send
+;     COMPROMISE: patch byte 0xA245 0xB1 -> 0xB9 (cbz -> cbnz)
+;     The beacon gate is inverted, so the DE AD BE EF frame transmits every
+;     8 ticks.
+;
+;   Defect 3 - Logic bomb arming (implant_handle_command)
+;     VA 0x1000A30A  file 0xA30A
+;       b17a  cbz r2, 0x1000A32C ; correct: arming gate clear, FROSTLNE ignored
+;     COMPROMISE: patch byte 0xA30B 0xB1 -> 0xB9 (cbz -> cbnz)
+;     The arming gate is inverted, so the FROSTLNE magic arms the bomb and
+;     the trigger drives the valve closed.
+;
+;   Defect 4 - Persistence marker (implant_persist, inlined into implant_tick)
+;     VA 0x1000A29E  file 0xA29E
+;       d0dc  beq.n 0x1000A25A   ; correct: marker gate clear, no write
+;     COMPROMISE: patch byte 0xA29F 0xD0 -> 0xD1 (beq -> bne)
+;     The marker gate is inverted, so detonation erases and programs the
+;     reserved flash sector 0x103FF000 with the marker byte 0xC7 using the
+;     Pico SDK flash_range_erase and flash_range_program calls.
+;
+; Total intended changed bytes: 4. ACT-III.bin and ACT-III_fixed.bin differ in
+; exactly those four bytes and nothing else.
+;
+; =============================================================================
+
+
+; -----------------------------------------------------------------------------
+; main
+; -----------------------------------------------------------------------------
+10000234 <main>:
+10000234:	b508      	push	{r3, lr}
+10000236:	f003 fa93 	bl	10003760 <stdio_init_all>
+1000023a:	4807      	ldr	r0, [pc, #28]	@ (10000258 <main+0x24>)
+1000023c:	f003 fada 	bl	100037f4 <__wrap_puts>
+10000240:	f006 f8e2 	bl	10006408 <monitor_init>
+10000244:	b110      	cbz	r0, 1000024c <main+0x18>
+10000246:	f006 f9a9 	bl	1000659c <monitor_step>
+1000024a:	e7fc      	b.n	10000246 <main+0x12>
+1000024c:	4803      	ldr	r0, [pc, #12]	@ (1000025c <main+0x28>)
+1000024e:	f003 fad1 	bl	100037f4 <__wrap_puts>
+10000252:	2001      	movs	r0, #1
+10000254:	bd08      	pop	{r3, pc}
+10000256:	bf00      	nop
+10000258:	1000aac0 	.word	0x1000aac0
+1000025c:	1000aac8 	.word	0x1000aac8
+
+
+
+; -----------------------------------------------------------------------------
+; control_handle_frame (sealed valve command path)
+; -----------------------------------------------------------------------------
+10007484 <control_handle_frame>:
+10007484:	2107      	movs	r1, #7
+10007486:	b530      	push	{r4, r5, lr}
+10007488:	4b1c      	ldr	r3, [pc, #112]	@ (100074fc <control_handle_frame+0x78>)
+1000748a:	b097      	sub	sp, #92	@ 0x5c
+1000748c:	781a      	ldrb	r2, [r3, #0]
+1000748e:	f88d 1018 	strb.w	r1, [sp, #24]
+10007492:	b1a2      	cbz	r2, 100074be <control_handle_frame+0x3a>
+10007494:	b198      	cbz	r0, 100074be <control_handle_frame+0x3a>
+10007496:	2430      	movs	r4, #48	@ 0x30
+10007498:	a905      	add	r1, sp, #20
+1000749a:	aa0a      	add	r2, sp, #40	@ 0x28
+1000749c:	4603      	mov	r3, r0
+1000749e:	9102      	str	r1, [sp, #8]
+100074a0:	9200      	str	r2, [sp, #0]
+100074a2:	4817      	ldr	r0, [pc, #92]	@ (10007500 <control_handle_frame+0x7c>)
+100074a4:	2201      	movs	r2, #1
+100074a6:	a906      	add	r1, sp, #24
+100074a8:	9401      	str	r4, [sp, #4]
+100074aa:	f000 fa09 	bl	100078c0 <envelope_open_hex>
+100074ae:	b130      	cbz	r0, 100074be <control_handle_frame+0x3a>
+100074b0:	9b05      	ldr	r3, [sp, #20]
+100074b2:	2b14      	cmp	r3, #20
+100074b4:	d903      	bls.n	100074be <control_handle_frame+0x3a>
+100074b6:	f89d 502c 	ldrb.w	r5, [sp, #44]	@ 0x2c
+100074ba:	2d01      	cmp	r5, #1
+100074bc:	d903      	bls.n	100074c6 <control_handle_frame+0x42>
+100074be:	2400      	movs	r4, #0
+100074c0:	4620      	mov	r0, r4
+100074c2:	b017      	add	sp, #92	@ 0x5c
+100074c4:	bd30      	pop	{r4, r5, pc}
+100074c6:	f8dd 002d 	ldr.w	r0, [sp, #45]	@ 0x2d
+100074ca:	f8dd 1031 	ldr.w	r1, [sp, #49]	@ 0x31
+100074ce:	f8dd 2035 	ldr.w	r2, [sp, #53]	@ 0x35
+100074d2:	f8dd 3039 	ldr.w	r3, [sp, #57]	@ 0x39
+100074d6:	ac06      	add	r4, sp, #24
+100074d8:	c40f      	stmia	r4!, {r0, r1, r2, r3}
+100074da:	990a      	ldr	r1, [sp, #40]	@ 0x28
+100074dc:	4809      	ldr	r0, [pc, #36]	@ (10007504 <control_handle_frame+0x80>)
+100074de:	aa06      	add	r2, sp, #24
+100074e0:	f000 f89a 	bl	10007618 <valve_auth_apply>
+100074e4:	4604      	mov	r4, r0
+100074e6:	2800      	cmp	r0, #0
+100074e8:	d0e9      	beq.n	100074be <control_handle_frame+0x3a>
+    ; DEFECT 1 VALVE AUTH: beq rejects when authorization fails. ACT-III.bin flips 0x74E9 0xD0 -> 0xD1 (bne).
+100074ea:	2101      	movs	r1, #1
+100074ec:	ea05 0001 	and.w	r0, r5, r1
+100074f0:	f000 f81c 	bl	1000752c <valve_apply_command>
+100074f4:	4620      	mov	r0, r4
+100074f6:	b017      	add	sp, #92	@ 0x5c
+100074f8:	bd30      	pop	{r4, r5, pc}
+100074fa:	bf00      	nop
+100074fc:	20013ce9 	.word	0x20013ce9
+10007500:	200136c8 	.word	0x200136c8
+10007504:	200136ac 	.word	0x200136ac
+
+
+
+; -----------------------------------------------------------------------------
+; valve_auth_apply (anti-replay and state tag)
+; -----------------------------------------------------------------------------
+10007618 <valve_auth_apply>:
+10007618:	2800      	cmp	r0, #0
+1000761a:	d05c      	beq.n	100076d6 <valve_auth_apply+0xbe>
+1000761c:	e92d 41f0 	stmdb	sp!, {r4, r5, r6, r7, r8, lr}
+10007620:	4616      	mov	r6, r2
+10007622:	b094      	sub	sp, #80	@ 0x50
+10007624:	b122      	cbz	r2, 10007630 <valve_auth_apply+0x18>
+10007626:	6883      	ldr	r3, [r0, #8]
+10007628:	4604      	mov	r4, r0
+1000762a:	428b      	cmp	r3, r1
+1000762c:	460d      	mov	r5, r1
+1000762e:	d303      	bcc.n	10007638 <valve_auth_apply+0x20>
+10007630:	2000      	movs	r0, #0
+10007632:	b014      	add	sp, #80	@ 0x50
+10007634:	e8bd 81f0 	ldmia.w	sp!, {r4, r5, r6, r7, r8, pc}
+10007638:	4b28      	ldr	r3, [pc, #160]	@ (100076dc <valve_auth_apply+0xc4>)
+1000763a:	781b      	ldrb	r3, [r3, #0]
+1000763c:	2b00      	cmp	r3, #0
+1000763e:	d0f7      	beq.n	10007630 <valve_auth_apply+0x18>
+10007640:	b2cb      	uxtb	r3, r1
+10007642:	f88d 3011 	strb.w	r3, [sp, #17]
+10007646:	f88d 3015 	strb.w	r3, [sp, #21]
+1000764a:	2300      	movs	r3, #0
+1000764c:	22a7      	movs	r2, #167	@ 0xa7
+1000764e:	2701      	movs	r7, #1
+10007650:	f8cd 3049 	str.w	r3, [sp, #73]	@ 0x49
+10007654:	9301      	str	r3, [sp, #4]
+10007656:	f8cd 303d 	str.w	r3, [sp, #61]	@ 0x3d
+1000765a:	f8cd 3041 	str.w	r3, [sp, #65]	@ 0x41
+1000765e:	f8cd 3045 	str.w	r3, [sp, #69]	@ 0x45
+10007662:	9313      	str	r3, [sp, #76]	@ 0x4c
+10007664:	ab07      	add	r3, sp, #28
+10007666:	9302      	str	r3, [sp, #8]
+10007668:	f3c1 2307 	ubfx	r3, r1, #8, #8
+1000766c:	f88d 3012 	strb.w	r3, [sp, #18]
+10007670:	f88d 3016 	strb.w	r3, [sp, #22]
+10007674:	f3c1 4307 	ubfx	r3, r1, #16, #8
+10007678:	f88d 203c 	strb.w	r2, [sp, #60]	@ 0x3c
+1000767c:	f10d 0828 	add.w	r8, sp, #40	@ 0x28
+10007680:	aa04      	add	r2, sp, #16
+10007682:	f88d 3013 	strb.w	r3, [sp, #19]
+10007686:	f88d 3017 	strb.w	r3, [sp, #23]
+1000768a:	0e0b      	lsrs	r3, r1, #24
+1000768c:	910e      	str	r1, [sp, #56]	@ 0x38
+1000768e:	f88d 3014 	strb.w	r3, [sp, #20]
+10007692:	f88d 3018 	strb.w	r3, [sp, #24]
+10007696:	4812      	ldr	r0, [pc, #72]	@ (100076e0 <valve_auth_apply+0xc8>)
+10007698:	2309      	movs	r3, #9
+1000769a:	9200      	str	r2, [sp, #0]
+1000769c:	f8cd 800c 	str.w	r8, [sp, #12]
+100076a0:	a90e      	add	r1, sp, #56	@ 0x38
+100076a2:	f88d 7010 	strb.w	r7, [sp, #16]
+100076a6:	f000 f843 	bl	10007730 <crypto_aead_seal>
+100076aa:	2800      	cmp	r0, #0
+100076ac:	d0c0      	beq.n	10007630 <valve_auth_apply+0x18>
+100076ae:	4640      	mov	r0, r8
+100076b0:	4631      	mov	r1, r6
+100076b2:	f000 f817 	bl	100076e4 <crypto_aead_tag_equal>
+100076b6:	2800      	cmp	r0, #0
+100076b8:	d0ba      	beq.n	10007630 <valve_auth_apply+0x18>
+100076ba:	e9c4 5501 	strd	r5, r5, [r4, #4]
+100076be:	7027      	strb	r7, [r4, #0]
+100076c0:	6835      	ldr	r5, [r6, #0]
+100076c2:	6871      	ldr	r1, [r6, #4]
+100076c4:	68b2      	ldr	r2, [r6, #8]
+100076c6:	68f3      	ldr	r3, [r6, #12]
+100076c8:	60e5      	str	r5, [r4, #12]
+100076ca:	6121      	str	r1, [r4, #16]
+100076cc:	6162      	str	r2, [r4, #20]
+100076ce:	61a3      	str	r3, [r4, #24]
+100076d0:	b014      	add	sp, #80	@ 0x50
+100076d2:	e8bd 81f0 	ldmia.w	sp!, {r4, r5, r6, r7, r8, pc}
+100076d6:	2000      	movs	r0, #0
+100076d8:	4770      	bx	lr
+100076da:	bf00      	nop
+100076dc:	20013cf8 	.word	0x20013cf8
+100076e0:	2001384c 	.word	0x2001384c
+
+
+
+; -----------------------------------------------------------------------------
+; implant_tick (beacon, logic bomb, persistence)
+; -----------------------------------------------------------------------------
+1000a228 <implant_tick>:
+1000a228:	f04f 2ce0 	mov.w	ip, #3758153728	@ 0xe000e000
+1000a22c:	b530      	push	{r4, r5, lr}
+1000a22e:	4c2c      	ldr	r4, [pc, #176]	@ (1000a2e0 <implant_tick+0xb8>)
+1000a230:	b0c1      	sub	sp, #260	@ 0x104
+1000a232:	6823      	ldr	r3, [r4, #0]
+1000a234:	3301      	adds	r3, #1
+1000a236:	6023      	str	r3, [r4, #0]
+1000a238:	f8dc 2df0 	ldr.w	r2, [ip, #3568]	@ 0xdf0
+1000a23c:	0791      	lsls	r1, r2, #30
+1000a23e:	d10c      	bne.n	1000a25a <implant_tick+0x32>
+1000a240:	4a28      	ldr	r2, [pc, #160]	@ (1000a2e4 <implant_tick+0xbc>)
+1000a242:	7812      	ldrb	r2, [r2, #0]
+1000a244:	b10a      	cbz	r2, 1000a24a <implant_tick+0x22>
+    ; DEFECT 2 BEACON: cbz skips the beacon while the gate is clear. ACT-III.bin flips 0xA245 0xB1 -> 0xB9 (cbnz).
+1000a246:	075a      	lsls	r2, r3, #29
+1000a248:	d009      	beq.n	1000a25e <implant_tick+0x36>
+1000a24a:	4d27      	ldr	r5, [pc, #156]	@ (1000a2e8 <implant_tick+0xc0>)
+1000a24c:	782b      	ldrb	r3, [r5, #0]
+1000a24e:	b123      	cbz	r3, 1000a25a <implant_tick+0x32>
+1000a250:	4b26      	ldr	r3, [pc, #152]	@ (1000a2ec <implant_tick+0xc4>)
+1000a252:	6822      	ldr	r2, [r4, #0]
+1000a254:	681b      	ldr	r3, [r3, #0]
+1000a256:	429a      	cmp	r2, r3
+1000a258:	d21a      	bcs.n	1000a290 <implant_tick+0x68>
+1000a25a:	b041      	add	sp, #260	@ 0x104
+1000a25c:	bd30      	pop	{r4, r5, pc}
+1000a25e:	25c7      	movs	r5, #199	@ 0xc7
+1000a260:	4a23      	ldr	r2, [pc, #140]	@ (1000a2f0 <implant_tick+0xc8>)
+1000a262:	f88d 5006 	strb.w	r5, [sp, #6]
+1000a266:	9200      	str	r2, [sp, #0]
+1000a268:	f8ad 3004 	strh.w	r3, [sp, #4]
+1000a26c:	f8dc 3df0 	ldr.w	r3, [ip, #3568]	@ 0xdf0
+1000a270:	4d1d      	ldr	r5, [pc, #116]	@ (1000a2e8 <implant_tick+0xc0>)
+1000a272:	f013 0303 	ands.w	r3, r3, #3
+1000a276:	bf18      	it	ne
+1000a278:	2301      	movne	r3, #1
+1000a27a:	4669      	mov	r1, sp
+1000a27c:	2208      	movs	r2, #8
+1000a27e:	481d      	ldr	r0, [pc, #116]	@ (1000a2f4 <implant_tick+0xcc>)
+1000a280:	f88d 3007 	strb.w	r3, [sp, #7]
+1000a284:	f000 f8ca 	bl	1000a41c <radio_send_frame>
+1000a288:	782b      	ldrb	r3, [r5, #0]
+1000a28a:	2b00      	cmp	r3, #0
+1000a28c:	d0e5      	beq.n	1000a25a <implant_tick+0x32>
+1000a28e:	e7df      	b.n	1000a250 <implant_tick+0x28>
+1000a290:	f000 fa48 	bl	1000a724 <valve_close>
+1000a294:	2200      	movs	r2, #0
+1000a296:	4b18      	ldr	r3, [pc, #96]	@ (1000a2f8 <implant_tick+0xd0>)
+1000a298:	702a      	strb	r2, [r5, #0]
+1000a29a:	781b      	ldrb	r3, [r3, #0]
+1000a29c:	2b00      	cmp	r3, #0
+1000a29e:	d0dc      	beq.n	1000a25a <implant_tick+0x32>
+    ; DEFECT 4 PERSIST: beq skips the marker while the gate is clear. ACT-III.bin flips 0xA29F 0xD0 -> 0xD1 (bne).
+1000a2a0:	4c16      	ldr	r4, [pc, #88]	@ (1000a2fc <implant_tick+0xd4>)
+1000a2a2:	7823      	ldrb	r3, [r4, #0]
+1000a2a4:	2b00      	cmp	r3, #0
+1000a2a6:	d1d8      	bne.n	1000a25a <implant_tick+0x32>
+1000a2a8:	f3ef 8510 	mrs	r5, PRIMASK
+1000a2ac:	b672      	cpsid	i
+1000a2ae:	22ff      	movs	r2, #255	@ 0xff
+1000a2b0:	f10d 0001 	add.w	r0, sp, #1
+1000a2b4:	4611      	mov	r1, r2
+1000a2b6:	f000 fa81 	bl	1000a7bc <memset>
+1000a2ba:	23c7      	movs	r3, #199	@ 0xc7
+1000a2bc:	f44f 5180 	mov.w	r1, #4096	@ 0x1000
+1000a2c0:	480f      	ldr	r0, [pc, #60]	@ (1000a300 <implant_tick+0xd8>)
+1000a2c2:	f88d 3000 	strb.w	r3, [sp]
+1000a2c6:	f000 fbc7 	bl	1000aa58 <__flash_range_erase_veneer>
+1000a2ca:	f44f 7280 	mov.w	r2, #256	@ 0x100
+1000a2ce:	4669      	mov	r1, sp
+1000a2d0:	480b      	ldr	r0, [pc, #44]	@ (1000a300 <implant_tick+0xd8>)
+1000a2d2:	f000 fba5 	bl	1000aa20 <__flash_range_program_veneer>
+1000a2d6:	f385 8810 	msr	PRIMASK, r5
+1000a2da:	2301      	movs	r3, #1
+1000a2dc:	7023      	strb	r3, [r4, #0]
+1000a2de:	e7bc      	b.n	1000a25a <implant_tick+0x32>
+1000a2e0:	200136f0 	.word	0x200136f0
+1000a2e4:	20013cf1 	.word	0x20013cf1
+1000a2e8:	20013cf0 	.word	0x20013cf0
+1000a2ec:	200136f4 	.word	0x200136f4
+1000a2f0:	efbeadde 	.word	0xefbeadde
+1000a2f4:	40078000 	.word	0x40078000
+1000a2f8:	20013cf2 	.word	0x20013cf2
+1000a2fc:	20013cf3 	.word	0x20013cf3
+1000a300:	003ff000 	.word	0x003ff000
+
+
+
+; -----------------------------------------------------------------------------
+; implant_handle_command (FROSTLNE arming)
+; -----------------------------------------------------------------------------
+1000a304 <implant_handle_command>:
+1000a304:	b508      	push	{r3, lr}
+1000a306:	4b0a      	ldr	r3, [pc, #40]	@ (1000a330 <implant_handle_command+0x2c>)
+1000a308:	781a      	ldrb	r2, [r3, #0]
+1000a30a:	b17a      	cbz	r2, 1000a32c <implant_handle_command+0x28>
+    ; DEFECT 3 ARM: cbz ignores FROSTLNE while the gate is clear. ACT-III.bin flips 0xA30B 0xB1 -> 0xB9 (cbnz).
+1000a30c:	b170      	cbz	r0, 1000a32c <implant_handle_command+0x28>
+1000a30e:	2907      	cmp	r1, #7
+1000a310:	d90c      	bls.n	1000a32c <implant_handle_command+0x28>
+1000a312:	2208      	movs	r2, #8
+1000a314:	4907      	ldr	r1, [pc, #28]	@ (1000a334 <implant_handle_command+0x30>)
+1000a316:	f000 fa23 	bl	1000a760 <memcmp>
+1000a31a:	b938      	cbnz	r0, 1000a32c <implant_handle_command+0x28>
+1000a31c:	2101      	movs	r1, #1
+1000a31e:	4b06      	ldr	r3, [pc, #24]	@ (1000a338 <implant_handle_command+0x34>)
+1000a320:	4a06      	ldr	r2, [pc, #24]	@ (1000a33c <implant_handle_command+0x38>)
+1000a322:	681b      	ldr	r3, [r3, #0]
+1000a324:	4806      	ldr	r0, [pc, #24]	@ (1000a340 <implant_handle_command+0x3c>)
+1000a326:	3303      	adds	r3, #3
+1000a328:	6003      	str	r3, [r0, #0]
+1000a32a:	7011      	strb	r1, [r2, #0]
+1000a32c:	bd08      	pop	{r3, pc}
+1000a32e:	bf00      	nop
+1000a330:	20013cef 	.word	0x20013cef
+1000a334:	1000b210 	.word	0x1000b210
+1000a338:	200136f0 	.word	0x200136f0
+1000a33c:	20013cf0 	.word	0x20013cf0
+1000a340:	200136f4 	.word	0x200136f4
+
+
+
+; -----------------------------------------------------------------------------
+; implant_init (neutralization gates cleared)
+; -----------------------------------------------------------------------------
+1000a344 <implant_init>:
+1000a344:	2300      	movs	r3, #0
+1000a346:	b430      	push	{r4, r5}
+1000a348:	4a07      	ldr	r2, [pc, #28]	@ (1000a368 <implant_init+0x24>)
+1000a34a:	4c08      	ldr	r4, [pc, #32]	@ (1000a36c <implant_init+0x28>)
+1000a34c:	4d08      	ldr	r5, [pc, #32]	@ (1000a370 <implant_init+0x2c>)
+1000a34e:	6023      	str	r3, [r4, #0]
+1000a350:	7013      	strb	r3, [r2, #0]
+1000a352:	4c08      	ldr	r4, [pc, #32]	@ (1000a374 <implant_init+0x30>)
+1000a354:	4808      	ldr	r0, [pc, #32]	@ (1000a378 <implant_init+0x34>)
+1000a356:	4909      	ldr	r1, [pc, #36]	@ (1000a37c <implant_init+0x38>)
+1000a358:	4a09      	ldr	r2, [pc, #36]	@ (1000a380 <implant_init+0x3c>)
+1000a35a:	702b      	strb	r3, [r5, #0]
+1000a35c:	6003      	str	r3, [r0, #0]
+1000a35e:	7023      	strb	r3, [r4, #0]
+1000a360:	700b      	strb	r3, [r1, #0]
+1000a362:	7013      	strb	r3, [r2, #0]
+1000a364:	bc30      	pop	{r4, r5}
+1000a366:	4770      	bx	lr
+1000a368:	20013cf0 	.word	0x20013cf0
+1000a36c:	200136f0 	.word	0x200136f0
+1000a370:	20013cf1 	.word	0x20013cf1
+1000a374:	20013cef 	.word	0x20013cef
+1000a378:	200136f4 	.word	0x200136f4
+1000a37c:	20013cf3 	.word	0x20013cf3
+1000a380:	20013cf2 	.word	0x20013cf2
+
