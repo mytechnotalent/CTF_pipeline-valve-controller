@@ -30,11 +30,15 @@ infrared receiver, senses an emergency-stop button, and exchanges an
 authenticated and authorized valve command link over an RYLR998 LoRa radio.
 
 A contractor called **FROSTLINE** did not break into this controller. It built an
-implant into the compiled firmware and signed the image. The cryptography is
-perfect: every valve command is sealed with XChaCha20-Poly1305 under an Argon2id
-field key, the anti-replay sequence window is stateful, and the authenticated
-state tag is real. The implant does not break the cipher. It lives on the same
-chip and calls the actuator directly, with no operator, no request, and no
+implant into the compiled firmware and signed the image. The primitives are
+standard and correctly implemented: every valve command is sealed with
+XChaCha20-Poly1305 under an Argon2id field key, the anti-replay sequence window
+is stateful, and the authenticated state tag is real. The boundary is the key
+material: the field passphrase and salt are compiled into the image in cleartext,
+so anyone holding the `.bin` can re-derive the field key, and the crypto is
+lab-only, not a secrecy guarantee. The implant does not break the cipher. It
+lives on the same chip and calls the actuator directly, with no operator, no
+request, and no
 authorization. Operative **NIGHTINGALE** pulled the compromised image off the
 pipeline node and then went quiet.
 
@@ -309,8 +313,11 @@ The crypto core is a correct reference construction, reused from Act II. Argon2i
 (`t=3`, `p=1`, `m=64`) derives the field key, XChaCha20-Poly1305 seals every
 frame, the monotonic sequence window rejects a replay, and the authenticated-state
 tag detects a tampered verdict. Only the four seams were broken. Once those bytes
-are restored, the authenticated envelope is trustworthy. Describe the
-construction honestly in your report.
+are restored, the authenticated envelope verifies as intended against anyone who
+sees only the wire. That is not a secrecy guarantee: the field passphrase and salt
+are embedded in the image, the field key is recoverable by anyone holding the
+`.bin`, and Argon2id at `m=64` KiB is below current memory-hardness guidance.
+Describe the construction honestly in your report.
 
 ### The Anti-Debug Trap
 

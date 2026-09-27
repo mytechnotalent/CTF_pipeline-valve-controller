@@ -78,7 +78,9 @@ Probe.
 | 4 | The Valve Command Authorization | inverted the authorization verdict so an unauthenticated or replayed valve command is accepted |
 
 The wire is sealed with XChaCha20-Poly1305, keyed through Argon2id. The
-cryptography is correct. Three of the four defects are not in the cipher at all:
+primitives are standard and correctly implemented, but the field passphrase and
+salt are compiled into the image in cleartext, so this is a lab-only key and not
+a secrecy guarantee. Three of the four defects are not in the cipher at all:
 they are an implant that lives on the same chip. The fourth is a policy seam in
 the command path. Read the dead, find the payload, and remove it.
 
