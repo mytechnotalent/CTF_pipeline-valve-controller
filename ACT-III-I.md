@@ -318,7 +318,7 @@ This is an analysis obstacle, not a graded defect on its own. The implant reads
 CoreDebug `DHCSR` at `0xE000EDF0` every tick and returns early while a probe is
 attached. In `implant_tick` the read is the `ldr.w r2, [ip, #3568]` at
 `0x1000A238`, and the test that suppresses the implant is at `0x1000A23C`. The
-same register is read again at `0x1000A184` to stamp the beacon blob. It is
+same register is read again at `0x1000A26C` to stamp the beacon blob. It is
 identical in both the compromised and corrected images. You must defeat it to
 observe the persistence write before you patch the shipped artifact.
 

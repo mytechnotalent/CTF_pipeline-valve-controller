@@ -107,7 +107,7 @@ bit 0 gives the real entry `0x1000015C`.
 | **[DOCUMENT]** Processor configured as ARM Cortex 32 little endian default | 2 | Screenshot shows the correct processor |
 | **[DOCUMENT]** Base address set to 0x10000000 | 2 | Base `0x10000000` |
 | **[DOCUMENT]** Vector table, initial stack pointer, and reset handler identified | 2 | Base `0x10000000`, initial SP `0x20082000`, reset handler `0x1000015D` |
-| **[DOCUMENT]** main and the SCADA controller state machine (monitor_step) addresses identified | 1 | `main` `0x10000234`, `monitor_step` `0x1000656C` |
+| **[DOCUMENT]** main and the SCADA controller state machine (monitor_step) addresses identified | 1 | `main` `0x10000234`, `monitor_step` `0x1000659C` |
 | **[DOCUMENT]** Module map identifies the valve, control, valve_auth, implant, and monitor anchors | 1 | At least one correct anchor per module |
 
 ### Instructor Notes & Assembly
@@ -262,7 +262,7 @@ the gate is clear, so the branch at `0x1000A30A` must be `cbz` (`0xB1`) to the
 `0x1000A32C` return. When the gate is set, the code compares the inbound 8 bytes
 against the arming magic pointer at `0x1000B210` (`memcmp`, `0x1000A316`), and on
 a match it loads the tick counter, adds the trigger delay (`adds r3, #3`), stores
-the trigger tick at `0x200136F0`, and sets the armed flag at `0x20013CF0`. The
+the trigger tick at `0x200136F4`, and sets the armed flag at `0x20013CF0`. The
 magic bytes on disk at `0x1000B210` are `46 52 4F 53 54 4C 4E 45`, the ASCII
 string `FROSTLNE`. The condition byte is the high byte at `0x1000A30B`.
 

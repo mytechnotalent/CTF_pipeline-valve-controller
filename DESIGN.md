@@ -88,15 +88,15 @@ New module `include/implant.h` + `src/implant.c`, compiled only under
 The implant erases and programs a marker into the reserved flash sector at
 `0x103FF000` to preview the persistence lesson of Act IV.
 
-## Companion CTF: ACT-III, four deep tasks
+## Companion CTF: ACT-III, four deep defects
 
 | Task | Points | Objective | Skill |
 | ---- | ------ | --------- | ----- |
-| 1 | 10 | Setup and analysis | vector table, `main`, module map |
-| 2 | 20 | Find and neutralize the beacon | hidden code path, magic preamble |
-| 3 | 20 | Defuse the logic bomb | trigger discovery, patch |
-| 4 | 20 | Defeat the anti-debug and prove the payload | GDB, `DHCSR` |
-| 5 | 20 | Seal the valve command path | fix track |
+| 1 | 10 | Setup and initial analysis | vector table, `main`, module map |
+| 2 | 20 | Bug #1 The Beacon: find and neutralize the covert frame | hidden code path, magic preamble |
+| 3 | 20 | Bug #2 The Logic Bomb: defuse the `FROSTLNE` trigger | trigger discovery, patch |
+| 4 | 20 | Bug #3 The Persistence Marker: defeat the anti-debug and prove the payload | GDB, `DHCSR`, reserved sector |
+| 5 | 20 | Bug #4 The Valve Command Authorization: seal the command path | fix track |
 | 6 | 10 | Export, verify, hardware proof, reflection | `ACT-III_fixed.bin`/`.uf2`, verifier |
 
 Every patch is in-place and same-size, so the shipped artifact can be patched
